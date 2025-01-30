@@ -5,22 +5,50 @@ import matplotlib.pyplot as plt
 import pdfplumber
 import unicodedata
 from fpdf import FPDF
+from pdf2image import convert_from_bytes
+import pytesseract
+from io import BytesIO
 
 def normalizar_texto(texto):
     """Remove acentos e converte para minúsculas."""
     texto = unicodedata.normalize('NFKD', texto).encode('ASCII', 'ignore').decode('utf-8')
     return texto.lower().strip()
 
-def extrair_nomes_pdf(pdf_file):
-    """Extrai nomes completos do PDF, normalizando-os."""
-    text = ""
-    with pdfplumber.open(pdf_file) as pdf:
-        for page in pdf.pages:
-            if page.extract_text():
-                text += page.extract_text() + "\n"
-    
-    # Ajustando a regex para capturar nomes corretamente
-    matches = re.findall(r'\b[A-ZÀ-Ú][a-zà-ú]+(?:\s[A-ZÀ-Ú][a-zà-ú]+)+\b', text)
+def extrair_texto_pdf(pdf_file):
+    """Tenta extrair texto diretamente do PDF. Se falhar, usa OCR."""
+    texto = ""
+
+    # Primeiro, tentamos extrair texto com pdfplumber
+    try:
+        with pdfplumber.open(pdf_file) as pdf:
+            for page in pdf.pages:
+                page_text = page.extract_text()
+                if page_text:
+                    texto += page_text + "\n"
+    except Exception as e:
+        st.error(f"Erro ao processar PDF: {e}")
+        return ""
+
+    # Se não encontrou texto, usa OCR
+    if not texto.strip():
+        st.warning("Nenhum texto detectado diretamente. Aplicando OCR...")
+        texto = extrair_texto_ocr(pdf_file)
+
+    return texto
+
+def extrair_texto_ocr(pdf_file):
+    """Extrai texto de PDFs digitalizados convertendo em imagem e aplicando OCR."""
+    texto = ""
+    images = convert_from_bytes(pdf_file.read())
+
+    for img in images:
+        texto += pytesseract.image_to_string(img, lang="por") + "\n"
+
+    return texto
+
+def extrair_nomes(texto):
+    """Extrai nomes completos do texto do PDF usando regex."""
+    matches = re.findall(r'\b[A-ZÀ-Ú][a-zà-ú]+(?:\s[A-ZÀ-Ú][a-zà-ú]+)+\b', texto)
     return sorted({normalizar_texto(name) for name in matches})
 
 def gerar_pdf(resultados):
@@ -29,18 +57,19 @@ def gerar_pdf(resultados):
     pdf.set_auto_page_break(auto=True, margin=15)
     pdf.add_page()
     pdf.set_font("Arial", size=12)
-    pdf.cell(200, 10, "Relatorio de Alunos Aprovados", ln=True, align='C')
+    pdf.cell(200, 10, "Relatório de Alunos Aprovados", ln=True, align='C')
     pdf.ln(10)
 
     for idx, resultado in enumerate(resultados, start=1):
         pdf.cell(0, 10, f"{idx}. {resultado['Nome']} - {resultado['Arquivo PDF']}", ln=True)
 
-    pdf_file = "alunos_aprovados.pdf"
-    pdf.output(pdf_file)
-    return pdf_file
+    pdf_output = BytesIO()
+    pdf.output(pdf_output, 'F')
+    pdf_output.seek(0)
+    return pdf_output
 
 def main():
-    st.title("Encontra aluno(s) aprovado(s) versão 1.0 (Melhorada)")
+    st.title("Encontra aluno(s) aprovado(s) versão 1.1 (OCR Integrado)")
     st.write("Cole a lista de nomes dos alunos no campo abaixo e carregue um ou mais PDFs com as listas de aprovados.")
 
     nomes_texto = st.text_area("Cole aqui os nomes dos alunos, um por linha:")
@@ -55,7 +84,8 @@ def main():
         progress_bar = st.progress(0)
 
         for i, pdf_file in enumerate(pdf_files, start=1):
-            approved_names = extrair_nomes_pdf(pdf_file)
+            texto_pdf = extrair_texto_pdf(pdf_file)
+            approved_names = extrair_nomes(texto_pdf)
             common_names = sorted(csv_names.intersection(approved_names))
 
             for idx, name in enumerate(common_names, start=1):
@@ -72,9 +102,8 @@ def main():
             st.download_button("Baixar resultados como CSV", data=csv_download, file_name="alunos_aprovados.csv")
 
             pdf_download = gerar_pdf(results)
-            with open(pdf_download, "rb") as pdf_file:
-                st.download_button("Baixar resultados como PDF", data=pdf_file, file_name="alunos_aprovados.pdf",
-                                   mime="application/pdf")
+            st.download_button("Baixar resultados como PDF", data=pdf_download, file_name="alunos_aprovados.pdf",
+                               mime="application/pdf")
         else:
             st.warning("Nenhum aluno aprovado foi encontrado nos PDFs enviados.")
 
