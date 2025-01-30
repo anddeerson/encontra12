@@ -1,7 +1,6 @@
 import streamlit as st
 import pandas as pd
 import re
-import matplotlib.pyplot as plt
 import pdfplumber
 import unicodedata
 from fpdf import FPDF
@@ -19,7 +18,6 @@ def extrair_texto_pdf(pdf_file):
     """Tenta extrair texto diretamente do PDF. Se falhar, usa OCR."""
     texto = ""
 
-    # Primeiro, tentamos extrair texto com pdfplumber
     try:
         with pdfplumber.open(pdf_file) as pdf:
             for page in pdf.pages:
@@ -49,25 +47,25 @@ def extrair_texto_ocr(pdf_file):
 
 def extrair_nomes(texto):
     """Extrai nomes completos do texto do PDF usando regex aprimorada."""
-    matches = re.findall(r'\b[A-ZÁÉÍÓÚ][a-záéíóú]+(?:\s[A-ZÁÉÍÓÚ][a-záéíóú]+)+\b', texto)
+    
+    # Expressão regular para capturar nomes completos
+    matches = re.findall(r'\b[A-ZÁÉÍÓÚ][a-záéíóú]+\s[A-ZÁÉÍÓÚ][a-záéíóú]+(?:\s[A-ZÁÉÍÓÚ][a-záéíóú]+)*\b', texto)
 
-    # Filtrando apenas nomes reais (evita palavras soltas)
-    nomes_filtrados = [nome for nome in matches if len(nome.split()) >= 2]
+    # Filtra apenas nomes reais e evita palavras comuns em editais
+    palavras_excluidas = ["MINISTÉRIO", "EDITAL", "CLASSIFICAÇÃO", "CONCORRÊNCIA", "INSCRIÇÃO"]
+    nomes_filtrados = [nome for nome in matches if len(nome.split()) >= 2 and not any(palavra in nome for palavra in palavras_excluidas)]
 
     nomes_extraidos = sorted({normalizar_texto(name) for name in nomes_filtrados})
-
-    # Exibir os nomes extraídos para depuração
-    st.write("🔍 **Nomes extraídos do PDF:**", nomes_extraidos[:50])  # Exibir os primeiros 50
 
     return nomes_extraidos
 
 def encontrar_nomes_similares(nome_digitado, lista_nomes_extraidos):
     """Tenta encontrar nomes semelhantes para corrigir pequenos erros de OCR, com maior precisão."""
-    match = get_close_matches(nome_digitado, lista_nomes_extraidos, n=1, cutoff=0.9)  # Ajuste de cutoff para evitar falsos positivos
+    match = get_close_matches(nome_digitado, lista_nomes_extraidos, n=1, cutoff=0.95)  # Maior precisão para evitar falsos positivos
     return match[0] if match else None
 
 def gerar_pdf(resultados):
-    """Gera um relatório PDF dos alunos aprovados encontrados."""
+    """Gera um relatório PDF dos alunos aprovados encontrados e armazena em BytesIO."""
     pdf = FPDF()
     pdf.set_auto_page_break(auto=True, margin=15)
     pdf.add_page()
@@ -78,13 +76,14 @@ def gerar_pdf(resultados):
     for idx, resultado in enumerate(resultados, start=1):
         pdf.cell(0, 10, f"{idx}. {resultado['Nome']} - {resultado['Arquivo PDF']}", ln=True)
 
+    # Salvar PDF na memória (BytesIO) em vez de um arquivo físico
     pdf_output = BytesIO()
     pdf.output(pdf_output, 'F')
     pdf_output.seek(0)
     return pdf_output
 
 def main():
-    st.title("Encontra aluno(s) aprovado(s) versão 1.3 (Melhor Filtragem)")
+    st.title("Encontra aluno(s) aprovado(s) versão 1.5 (Correções Finais)")
     st.write("Cole a lista de nomes dos alunos no campo abaixo e carregue um ou mais PDFs com as listas de aprovados.")
 
     nomes_texto = st.text_area("Cole aqui os nomes dos alunos, um por linha:")
