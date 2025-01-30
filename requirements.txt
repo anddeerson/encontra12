@@ -3,4 +3,7 @@ pandas
 matplotlib
 pdfplumber
 fpdf
-unicodedata2
+pytesseract
+pdf2image
+Pillow
+poppler-utils
