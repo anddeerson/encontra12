@@ -31,7 +31,7 @@ def extrair_texto_pdf(pdf_file):
     if not texto.strip():
         texto = extrair_texto_ocr(pdf_file)
 
-    
+    return texto
 
 def extrair_texto_ocr(pdf_file):
     """Extrai texto de PDFs digitalizados convertendo em imagem e aplicando OCR."""
@@ -41,7 +41,7 @@ def extrair_texto_ocr(pdf_file):
     for img in images:
         texto += pytesseract.image_to_string(img, lang="por") + "\n"
 
-    
+    return texto
 
 def extrair_nomes(texto):
     """Extrai nomes completos do texto do PDF usando regex aprimorada."""
@@ -55,7 +55,6 @@ def extrair_nomes(texto):
 
     nomes_extraidos = sorted({normalizar_texto(name) for name in nomes_filtrados})
 
-    return nomes_extraidos
 
 def encontrar_nomes_similares(nome_digitado, lista_nomes_extraidos):
     """Tenta encontrar nomes semelhantes para corrigir pequenos erros de OCR, com maior precisão."""
