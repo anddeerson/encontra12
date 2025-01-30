@@ -35,9 +35,6 @@ def extrair_texto_pdf(pdf_file):
         st.warning("Nenhum texto detectado diretamente. Aplicando OCR...")
         texto = extrair_texto_ocr(pdf_file)
 
-    # Exibir texto extraído para depuração
-    st.text_area("Texto extraído do PDF:", texto[:3000])  # Exibir até 3000 caracteres
-
     return texto
 
 def extrair_texto_ocr(pdf_file):
@@ -51,9 +48,13 @@ def extrair_texto_ocr(pdf_file):
     return texto
 
 def extrair_nomes(texto):
-    """Extrai nomes completos do texto do PDF usando regex."""
-    matches = re.findall(r'\b[A-ZÀ-Ú][a-zà-ú]+(?:\s[A-ZÀ-Ú][a-zà-ú]+)+\b', texto)
-    nomes_extraidos = sorted({normalizar_texto(name) for name in matches})
+    """Extrai nomes completos do texto do PDF usando regex aprimorada."""
+    matches = re.findall(r'\b[A-ZÁÉÍÓÚ][a-záéíóú]+(?:\s[A-ZÁÉÍÓÚ][a-záéíóú]+)+\b', texto)
+
+    # Filtrando apenas nomes reais (evita palavras soltas)
+    nomes_filtrados = [nome for nome in matches if len(nome.split()) >= 2]
+
+    nomes_extraidos = sorted({normalizar_texto(name) for name in nomes_filtrados})
 
     # Exibir os nomes extraídos para depuração
     st.write("🔍 **Nomes extraídos do PDF:**", nomes_extraidos[:50])  # Exibir os primeiros 50
@@ -61,8 +62,8 @@ def extrair_nomes(texto):
     return nomes_extraidos
 
 def encontrar_nomes_similares(nome_digitado, lista_nomes_extraidos):
-    """Tenta encontrar nomes semelhantes para corrigir pequenos erros de OCR."""
-    match = get_close_matches(nome_digitado, lista_nomes_extraidos, n=1, cutoff=0.8)
+    """Tenta encontrar nomes semelhantes para corrigir pequenos erros de OCR, com maior precisão."""
+    match = get_close_matches(nome_digitado, lista_nomes_extraidos, n=1, cutoff=0.9)  # Ajuste de cutoff para evitar falsos positivos
     return match[0] if match else None
 
 def gerar_pdf(resultados):
@@ -83,7 +84,7 @@ def gerar_pdf(resultados):
     return pdf_output
 
 def main():
-    st.title("Encontra aluno(s) aprovado(s) versão 1.2 (OCR Melhorado)")
+    st.title("Encontra aluno(s) aprovado(s) versão 1.3 (Melhor Filtragem)")
     st.write("Cole a lista de nomes dos alunos no campo abaixo e carregue um ou mais PDFs com as listas de aprovados.")
 
     nomes_texto = st.text_area("Cole aqui os nomes dos alunos, um por linha:")
