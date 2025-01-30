@@ -31,7 +31,7 @@ def extrair_texto_pdf(pdf_file):
     if not texto.strip():
         texto = extrair_texto_ocr(pdf_file)
 
-    return texto
+    
 
 def extrair_texto_ocr(pdf_file):
     """Extrai texto de PDFs digitalizados convertendo em imagem e aplicando OCR."""
