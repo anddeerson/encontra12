@@ -76,12 +76,11 @@ def gerar_pdf(resultados):
 
     # Salvar PDF na memória (BytesIO) em vez de um arquivo físico
     pdf_output = BytesIO()
-    pdf.output(pdf_output, 'F')
-    pdf_output.seek(0)
-    return pdf_output
+    pdf.output(pdf_output, 'S')  # 'S' significa retornar como string de bytes
+    return pdf_output.getvalue()  # Converter para bytes para o download funcionar
 
 def main():
-    st.title("Encontra aluno(s) aprovado(s) versão 1.6 (Final)")
+    st.title("Encontra aluno(s) aprovado(s) versão 1.7 (Correção do PDF)")
     st.write("Cole a lista de nomes dos alunos no campo abaixo e carregue um ou mais PDFs com as listas de aprovados.")
 
     nomes_texto = st.text_area("Cole aqui os nomes dos alunos, um por linha:")
@@ -119,7 +118,7 @@ def main():
             st.download_button("Baixar resultados como CSV", data=csv_download, file_name="alunos_aprovados.csv")
 
             pdf_download = gerar_pdf(results)
-            st.download_button("Baixar resultados como PDF", data=pdf_download.getvalue(), file_name="alunos_aprovados.pdf",
+            st.download_button("Baixar resultados como PDF", data=pdf_download, file_name="alunos_aprovados.pdf",
                                mime="application/pdf")
         else:
             st.warning("Nenhum aluno aprovado foi encontrado nos PDFs enviados.")
