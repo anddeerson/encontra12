@@ -8,9 +8,10 @@ from fpdf import FPDF
 from pdf2image import convert_from_bytes
 import pytesseract
 from io import BytesIO
+from difflib import get_close_matches
 
 def normalizar_texto(texto):
-    """Remove acentos e converte para minúsculas."""
+    """Remove acentos, espaços extras e converte para minúsculas."""
     texto = unicodedata.normalize('NFKD', texto).encode('ASCII', 'ignore').decode('utf-8')
     return texto.lower().strip()
 
@@ -34,6 +35,9 @@ def extrair_texto_pdf(pdf_file):
         st.warning("Nenhum texto detectado diretamente. Aplicando OCR...")
         texto = extrair_texto_ocr(pdf_file)
 
+    # Exibir texto extraído para depuração
+    st.text_area("Texto extraído do PDF:", texto[:3000])  # Exibir até 3000 caracteres
+
     return texto
 
 def extrair_texto_ocr(pdf_file):
@@ -49,7 +53,17 @@ def extrair_texto_ocr(pdf_file):
 def extrair_nomes(texto):
     """Extrai nomes completos do texto do PDF usando regex."""
     matches = re.findall(r'\b[A-ZÀ-Ú][a-zà-ú]+(?:\s[A-ZÀ-Ú][a-zà-ú]+)+\b', texto)
-    return sorted({normalizar_texto(name) for name in matches})
+    nomes_extraidos = sorted({normalizar_texto(name) for name in matches})
+
+    # Exibir os nomes extraídos para depuração
+    st.write("🔍 **Nomes extraídos do PDF:**", nomes_extraidos[:50])  # Exibir os primeiros 50
+
+    return nomes_extraidos
+
+def encontrar_nomes_similares(nome_digitado, lista_nomes_extraidos):
+    """Tenta encontrar nomes semelhantes para corrigir pequenos erros de OCR."""
+    match = get_close_matches(nome_digitado, lista_nomes_extraidos, n=1, cutoff=0.8)
+    return match[0] if match else None
 
 def gerar_pdf(resultados):
     """Gera um relatório PDF dos alunos aprovados encontrados."""
@@ -69,7 +83,7 @@ def gerar_pdf(resultados):
     return pdf_output
 
 def main():
-    st.title("Encontra aluno(s) aprovado(s) versão 1.1 (OCR Integrado)")
+    st.title("Encontra aluno(s) aprovado(s) versão 1.2 (OCR Melhorado)")
     st.write("Cole a lista de nomes dos alunos no campo abaixo e carregue um ou mais PDFs com as listas de aprovados.")
 
     nomes_texto = st.text_area("Cole aqui os nomes dos alunos, um por linha:")
@@ -86,9 +100,14 @@ def main():
         for i, pdf_file in enumerate(pdf_files, start=1):
             texto_pdf = extrair_texto_pdf(pdf_file)
             approved_names = extrair_nomes(texto_pdf)
-            common_names = sorted(csv_names.intersection(approved_names))
+            common_names = []
 
-            for idx, name in enumerate(common_names, start=1):
+            for nome in csv_names:
+                nome_correto = encontrar_nomes_similares(nome, approved_names)
+                if nome_correto:
+                    common_names.append(nome_correto)
+
+            for idx, name in enumerate(sorted(common_names), start=1):
                 results.append({"Ordem": idx, "Nome": name, "Arquivo PDF": pdf_file.name})
 
             progress_bar.progress(i / total_pdfs)
