@@ -41,7 +41,7 @@ def extrair_texto_ocr(pdf_file):
     for img in images:
         texto += pytesseract.image_to_string(img, lang="por") + "\n"
 
-    return texto
+    
 
 def extrair_nomes(texto):
     """Extrai nomes completos do texto do PDF usando regex aprimorada."""
