@@ -116,12 +116,18 @@ def main():
             results_df = pd.DataFrame(results)
             st.dataframe(results_df)
 
+            # Botão para baixar CSV
             csv_download = results_df.to_csv(index=False).encode("utf-8")
             st.download_button("Baixar resultados como CSV", data=csv_download, file_name="alunos_aprovados.csv")
 
+            # Botão para baixar PDF
             pdf_download = gerar_pdf(results)
-            st.download_button("Baixar resultados como PDF", data=pdf_download, file_name="alunos_aprovados.pdf",
-                               mime="application/pdf")
+            st.download_button(
+                "Baixar resultados como PDF",
+                data=pdf_download,
+                file_name="alunos_aprovados.pdf",
+                mime="application/pdf"
+            )
         else:
             st.warning("Nenhum aluno aprovado foi encontrado nos PDFs enviados.")
 
