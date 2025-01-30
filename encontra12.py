@@ -76,8 +76,10 @@ def gerar_pdf(resultados):
 
     # Salvar PDF na memória (BytesIO) em vez de um arquivo físico
     pdf_output = BytesIO()
-    pdf.output(pdf_output, 'S')  # 'S' significa retornar como string de bytes
-    return pdf_output.getvalue()  # Converter para bytes para o download funcionar
+    pdf_bytes = pdf.output(dest='S').encode('latin1')  # Converte a string de bytes para bytes
+    pdf_output.write(pdf_bytes)
+    pdf_output.seek(0)  # Volta ao início do buffer para leitura
+    return pdf_output.getvalue()  # Retorna os bytes do PDF
 
 def main():
     st.title("Encontra aluno(s) aprovado(s) versão 1.7 (Correção do PDF)")
