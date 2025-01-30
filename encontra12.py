@@ -24,13 +24,11 @@ def extrair_texto_pdf(pdf_file):
                 page_text = page.extract_text()
                 if page_text:
                     texto += page_text + "\n"
-    except Exception as e:
-        st.error(f"Erro ao processar PDF: {e}")
+    except Exception:
         return ""
 
     # Se não encontrou texto, usa OCR
     if not texto.strip():
-        st.warning("Nenhum texto detectado diretamente. Aplicando OCR...")
         texto = extrair_texto_ocr(pdf_file)
 
     return texto
@@ -83,7 +81,7 @@ def gerar_pdf(resultados):
     return pdf_output
 
 def main():
-    st.title("Encontra aluno(s) aprovado(s) versão 1.5 (Correções Finais)")
+    st.title("Encontra aluno(s) aprovado(s) versão 1.6 (Final)")
     st.write("Cole a lista de nomes dos alunos no campo abaixo e carregue um ou mais PDFs com as listas de aprovados.")
 
     nomes_texto = st.text_area("Cole aqui os nomes dos alunos, um por linha:")
@@ -121,7 +119,7 @@ def main():
             st.download_button("Baixar resultados como CSV", data=csv_download, file_name="alunos_aprovados.csv")
 
             pdf_download = gerar_pdf(results)
-            st.download_button("Baixar resultados como PDF", data=pdf_download, file_name="alunos_aprovados.pdf",
+            st.download_button("Baixar resultados como PDF", data=pdf_download.getvalue(), file_name="alunos_aprovados.pdf",
                                mime="application/pdf")
         else:
             st.warning("Nenhum aluno aprovado foi encontrado nos PDFs enviados.")
