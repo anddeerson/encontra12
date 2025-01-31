@@ -1,112 +1,123 @@
 import streamlit as st
 import pandas as pd
 import re
+import matplotlib.pyplot as plt
+from PyPDF2 import PdfReader
 import pdfplumber
+from pdfminer.high_level import extract_text
 import unicodedata
-from pdf2image import convert_from_bytes
-import pytesseract
-from difflib import get_close_matches
+from fpdf import FPDF
+import time
 
 def normalizar_texto(texto):
-    """Remove acentos, espaços extras e converte para minúsculas."""
+    """Remove acentos, converte para minúsculas e remove espaços extras."""
     texto = unicodedata.normalize('NFKD', texto).encode('ASCII', 'ignore').decode('utf-8')
-    return texto.lower().strip()
+    return re.sub(r'\s+', ' ', texto.strip().lower())
 
 def extrair_texto_pdf(pdf_file):
-    """Tenta extrair texto diretamente do PDF. Se falhar, usa OCR."""
-    texto = ""
-
+    """Extrai o texto do PDF utilizando múltiplas estratégias."""
+    text = ""
     try:
+        # Tentativa 1: PyPDF2
+        pdf_reader = PdfReader(pdf_file)
+        for page in pdf_reader.pages:
+            if page.extract_text():
+                text += page.extract_text() + "\n"
+        if text.strip():
+            return text
+    except:
+        pass
+    
+    try:
+        # Tentativa 2: pdfplumber
         with pdfplumber.open(pdf_file) as pdf:
             for page in pdf.pages:
-                page_text = page.extract_text()
-                if page_text:
-                    texto += page_text + "\n"
-    except Exception:
-        return ""
-
-    # Se não encontrou texto, usa OCR
-    if not texto.strip():
-        texto = extrair_texto_ocr(pdf_file)
-
-    return texto
-
-def extrair_texto_ocr(pdf_file):
-    """Extrai texto de PDFs digitalizados convertendo em imagem e aplicando OCR."""
-    texto = ""
-    images = convert_from_bytes(pdf_file.read())
-
-    for img in images:
-        texto += pytesseract.image_to_string(img, lang="por") + "\n"
-
-    return texto
-
-def extrair_nomes(texto):
-    """Extrai nomes completos do texto do PDF usando regex aprimorada."""
+                text += page.extract_text() + "\n" if page.extract_text() else ""
+        if text.strip():
+            return text
+    except:
+        pass
     
-    # Expressão regular para capturar nomes completos
-    matches = re.findall(r'\b[A-ZÁÉÍÓÚ][a-záéíóú]+\s[A-ZÁÉÍÓÚ][a-záéíóú]+(?:\s[A-ZÁÉÍÓÚ][a-záéíóú]+)*\b', texto)
+    try:
+        # Tentativa 3: pdfminer
+        text = extract_text(pdf_file)
+        if text.strip():
+            return text
+    except:
+        pass
+    
+    return ""  # Retorna string vazia se nenhuma abordagem funcionar
 
-    # Filtra apenas nomes reais e evita palavras comuns em editais
-    palavras_excluidas = ["MINISTÉRIO", "EDITAL", "CLASSIFICAÇÃO", "CONCORRÊNCIA", "INSCRIÇÃO"]
-    nomes_filtrados = [nome for nome in matches if len(nome.split()) >= 2 and not any(palavra in nome for palavra in palavras_excluidas)]
+def extrair_nomes_pdf(pdf_file):
+    """Extrai nomes completos do PDF, normalizando-os."""
+    text = extrair_texto_pdf(pdf_file)
+    if not text:
+        return []  # Retorna lista vazia caso não consiga extrair texto
+    
+    # Expressão regular aprimorada para detectar nomes completos
+    matches = re.findall(r'\b[A-ZÀ-Ú][a-zà-ú]+(?: [A-ZÀ-Ú][a-zà-ú]+)+\b', text)
+    return sorted({normalizar_texto(name) for name in matches})
 
-    nomes_extraidos = sorted({normalizar_texto(name) for name in nomes_filtrados})
+def gerar_pdf(resultados):
+    pdf = FPDF()
+    pdf.set_auto_page_break(auto=True, margin=15)
+    pdf.add_page()
+    pdf.set_font("Arial", size=12)
+    pdf.cell(200, 10, "Relatorio de Alunos Aprovados", ln=True, align='C')
+    pdf.ln(10)
 
-    return nomes_extraidos
+    for idx, resultado in enumerate(resultados, start=1):
+        pdf.cell(0, 10, f"{idx}. {resultado['Nome']} - {resultado['Arquivo PDF']}", ln=True)
 
-def encontrar_nomes_similares(nome_digitado, lista_nomes_extraidos):
-    """Tenta encontrar nomes semelhantes para corrigir pequenos erros de OCR, com maior precisão."""
-    match = get_close_matches(nome_digitado, lista_nomes_extraidos, n=1, cutoff=0.95)  # Maior precisão para evitar falsos positivos
-    return match[0] if match else None
+    pdf_file = "alunos_aprovados.pdf"
+    pdf.output(pdf_file)
+    return pdf_file
 
 def main():
-    st.title("Encontra aluno(s) aprovado(s)")
+    st.title("Encontra aluno(s) aprovado(s) - Versão Melhorada")
     st.write("Cole a lista de nomes dos alunos no campo abaixo e carregue um ou mais PDFs com as listas de aprovados.")
 
-    # Campo para colar os nomes dos alunos
     nomes_texto = st.text_area("Cole aqui os nomes dos alunos, um por linha:")
-
-    # Upload de arquivos PDF
     pdf_files = st.file_uploader("Carregar arquivos PDF", type=["pdf"], accept_multiple_files=True)
 
     if nomes_texto and pdf_files:
-        # Normaliza a lista de nomes fornecida pelo usuário
         nomes_lista = [normalizar_texto(nome) for nome in nomes_texto.split("\n") if nome.strip()]
         csv_names = set(nomes_lista)
 
         results = []
+        failed_pdfs = []
+        total_pdfs = len(pdf_files)
+        progress_bar = st.progress(0)
 
-        # Processa cada PDF carregado
-        for pdf_file in pdf_files:
-            texto_pdf = extrair_texto_pdf(pdf_file)
-            approved_names = extrair_nomes(texto_pdf)
+        for i, pdf_file in enumerate(pdf_files, start=1):
+            approved_names = extrair_nomes_pdf(pdf_file)
+            if not approved_names:
+                failed_pdfs.append(pdf_file.name)
+                continue
 
-            # Verifica se os nomes fornecidos estão na lista de aprovados
-            for nome in csv_names:
-                nome_correto = encontrar_nomes_similares(nome, approved_names)
-                if nome_correto:
-                    results.append({"Nome": nome_correto, "Arquivo PDF": pdf_file.name})
+            common_names = sorted(csv_names.intersection(approved_names))
+            for idx, name in enumerate(common_names, start=1):
+                results.append({"Ordem": idx, "Nome": name, "Arquivo PDF": pdf_file.name})
 
-        # Se houver resultados, exibe os nomes encontrados e o botão de download
+            progress_bar.progress(i / total_pdfs)
+
         if results:
-            st.write("### Alunos Aprovados Encontrados:")
-            for resultado in results:
-                st.write(f"- {resultado['Nome']} (Arquivo: {resultado['Arquivo PDF']})")
-
-            # Cria um DataFrame para o CSV
+            st.success("Alunos aprovados encontrados!")
             results_df = pd.DataFrame(results)
+            st.dataframe(results_df)
 
-            # Botão para baixar CSV
             csv_download = results_df.to_csv(index=False).encode("utf-8")
-            st.download_button(
-                "Baixar resultados como CSV",
-                data=csv_download,
-                file_name="alunos_aprovados.csv",
-                mime="text/csv"
-            )
+            st.download_button("Baixar resultados como CSV", data=csv_download, file_name="alunos_aprovados.csv")
+
+            pdf_download = gerar_pdf(results)
+            with open(pdf_download, "rb") as pdf_file:
+                st.download_button("Baixar resultados como PDF", data=pdf_file, file_name="alunos_aprovados.pdf",
+                                   mime="application/pdf")
         else:
             st.warning("Nenhum aluno aprovado foi encontrado nos PDFs enviados.")
+
+        if failed_pdfs:
+            st.error(f"Falha ao extrair texto dos seguintes PDFs: {', '.join(failed_pdfs)}")
 
 if __name__ == "__main__":
     main()
