@@ -20,21 +20,21 @@ def extrair_texto_pdf(pdf_file):
     """Extrai o texto do PDF utilizando múltiplas estratégias, incluindo OCR para PDFs baseados em imagem."""
     text = ""
     try:
-        # Tentativa 1: PyPDF2
-        pdf_reader = PdfReader(pdf_file)
-        for page in pdf_reader.pages:
-            if page.extract_text():
-                text += page.extract_text() + "\n"
+        # Tentativa 1: pdfplumber para lidar com tabelas
+        with pdfplumber.open(pdf_file) as pdf:
+            for page in pdf.pages:
+                text += page.extract_text() + "\n" if page.extract_text() else ""
         if text.strip():
             return text
     except:
         pass
     
     try:
-        # Tentativa 2: pdfplumber
-        with pdfplumber.open(pdf_file) as pdf:
-            for page in pdf.pages:
-                text += page.extract_text() + "\n" if page.extract_text() else ""
+        # Tentativa 2: PyPDF2
+        pdf_reader = PdfReader(pdf_file)
+        for page in pdf_reader.pages:
+            if page.extract_text():
+                text += page.extract_text() + "\n"
         if text.strip():
             return text
     except:
@@ -66,8 +66,11 @@ def extrair_nomes_pdf(pdf_file):
     if not text:
         return []  # Retorna lista vazia caso não consiga extrair texto
     
-    # Expressão regular aprimorada para detectar nomes completos
-    matches = re.findall(r'\b[A-ZÀ-Ú][a-zà-ú]+(?: [A-ZÀ-Ú][a-zà-ú]+)+\b', text)
+    # Expressão regular aprimorada para lidar com diferentes formatações
+    matches = re.findall(r'(?<=\d{6}\s)[A-ZÀ-Ú][a-zà-ú]+(?: [A-ZÀ-Ú][a-zà-ú]+)+', text)
+    if not matches:
+        matches = re.findall(r'\b[A-ZÀ-Ú][a-zà-ú]+(?: [A-ZÀ-Ú][a-zà-ú]+)+\b', text)
+    
     return sorted({normalizar_texto(name) for name in matches})
 
 def gerar_pdf(resultados):
@@ -86,7 +89,7 @@ def gerar_pdf(resultados):
     return pdf_file
 
 def main():
-    st.title("Encontra aluno(s) aprovado(s) - Versão Melhorada")
+    st.title("Encontra aluno(s) aprovado(s) - Versão 1.2 (Com scam por OCR")
     st.write("Cole a lista de nomes dos alunos no campo abaixo e carregue um ou mais PDFs com as listas de aprovados.")
 
     nomes_texto = st.text_area("Cole aqui os nomes dos alunos, um por linha:")
