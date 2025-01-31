@@ -3,10 +3,8 @@ import pandas as pd
 import re
 import pdfplumber
 import unicodedata
-from fpdf import FPDF
 from pdf2image import convert_from_bytes
 import pytesseract
-from io import BytesIO
 from difflib import get_close_matches
 
 def normalizar_texto(texto):
@@ -55,77 +53,57 @@ def extrair_nomes(texto):
 
     nomes_extraidos = sorted({normalizar_texto(name) for name in nomes_filtrados})
 
+    return nomes_extraidos
 
 def encontrar_nomes_similares(nome_digitado, lista_nomes_extraidos):
     """Tenta encontrar nomes semelhantes para corrigir pequenos erros de OCR, com maior precisão."""
     match = get_close_matches(nome_digitado, lista_nomes_extraidos, n=1, cutoff=0.95)  # Maior precisão para evitar falsos positivos
     return match[0] if match else None
 
-def gerar_pdf(resultados):
-    """Gera um relatório PDF dos alunos aprovados encontrados e armazena em BytesIO."""
-    pdf = FPDF()
-    pdf.set_auto_page_break(auto=True, margin=15)
-    pdf.add_page()
-    pdf.set_font("Arial", size=12)
-    pdf.cell(200, 10, "Relatório de Alunos Aprovados", ln=True, align='C')
-    pdf.ln(10)
-
-    for idx, resultado in enumerate(resultados, start=1):
-        pdf.cell(0, 10, f"{idx}. {resultado['Nome']} - {resultado['Arquivo PDF']}", ln=True)
-
-    # Salvar PDF na memória (BytesIO) em vez de um arquivo físico
-    pdf_output = BytesIO()
-    pdf_bytes = pdf.output(dest='S').encode('latin1')  # Converte a string de bytes para bytes
-    pdf_output.write(pdf_bytes)
-    pdf_output.seek(0)  # Volta ao início do buffer para leitura
-    return pdf_output.getvalue()  # Retorna os bytes do PDF
-
 def main():
-    st.title("Encontra aluno(s) aprovado(s) versão 1.7 (Correção do PDF)")
+    st.title("Encontra aluno(s) aprovado(s)")
     st.write("Cole a lista de nomes dos alunos no campo abaixo e carregue um ou mais PDFs com as listas de aprovados.")
 
+    # Campo para colar os nomes dos alunos
     nomes_texto = st.text_area("Cole aqui os nomes dos alunos, um por linha:")
+
+    # Upload de arquivos PDF
     pdf_files = st.file_uploader("Carregar arquivos PDF", type=["pdf"], accept_multiple_files=True)
 
     if nomes_texto and pdf_files:
+        # Normaliza a lista de nomes fornecida pelo usuário
         nomes_lista = [normalizar_texto(nome) for nome in nomes_texto.split("\n") if nome.strip()]
         csv_names = set(nomes_lista)
 
         results = []
-        total_pdfs = len(pdf_files)
-        progress_bar = st.progress(0)
 
-        for i, pdf_file in enumerate(pdf_files, start=1):
+        # Processa cada PDF carregado
+        for pdf_file in pdf_files:
             texto_pdf = extrair_texto_pdf(pdf_file)
             approved_names = extrair_nomes(texto_pdf)
-            common_names = []
 
+            # Verifica se os nomes fornecidos estão na lista de aprovados
             for nome in csv_names:
                 nome_correto = encontrar_nomes_similares(nome, approved_names)
                 if nome_correto:
-                    common_names.append(nome_correto)
+                    results.append({"Nome": nome_correto, "Arquivo PDF": pdf_file.name})
 
-            for idx, name in enumerate(sorted(common_names), start=1):
-                results.append({"Ordem": idx, "Nome": name, "Arquivo PDF": pdf_file.name})
-
-            progress_bar.progress(i / total_pdfs)
-
+        # Se houver resultados, exibe os nomes encontrados e o botão de download
         if results:
-            st.success("Alunos aprovados encontrados!")
+            st.write("### Alunos Aprovados Encontrados:")
+            for resultado in results:
+                st.write(f"- {resultado['Nome']} (Arquivo: {resultado['Arquivo PDF']})")
+
+            # Cria um DataFrame para o CSV
             results_df = pd.DataFrame(results)
-            st.dataframe(results_df)
 
             # Botão para baixar CSV
             csv_download = results_df.to_csv(index=False).encode("utf-8")
-            st.download_button("Baixar resultados como CSV", data=csv_download, file_name="alunos_aprovados.csv")
-
-            # Botão para baixar PDF
-            pdf_download = gerar_pdf(results)
             st.download_button(
-                "Baixar resultados como PDF",
-                data=pdf_download,
-                file_name="alunos_aprovados.pdf",
-                mime="application/pdf"
+                "Baixar resultados como CSV",
+                data=csv_download,
+                file_name="alunos_aprovados.csv",
+                mime="text/csv"
             )
         else:
             st.warning("Nenhum aluno aprovado foi encontrado nos PDFs enviados.")
