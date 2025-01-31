@@ -8,6 +8,8 @@ from pdfminer.high_level import extract_text
 import unicodedata
 from fpdf import FPDF
 import time
+from pdf2image import convert_from_path
+import pytesseract
 
 def normalizar_texto(texto):
     """Remove acentos, converte para minúsculas e remove espaços extras."""
@@ -15,7 +17,7 @@ def normalizar_texto(texto):
     return re.sub(r'\s+', ' ', texto.strip().lower())
 
 def extrair_texto_pdf(pdf_file):
-    """Extrai o texto do PDF utilizando múltiplas estratégias."""
+    """Extrai o texto do PDF utilizando múltiplas estratégias, incluindo OCR para PDFs baseados em imagem."""
     text = ""
     try:
         # Tentativa 1: PyPDF2
@@ -41,6 +43,16 @@ def extrair_texto_pdf(pdf_file):
     try:
         # Tentativa 3: pdfminer
         text = extract_text(pdf_file)
+        if text.strip():
+            return text
+    except:
+        pass
+    
+    # Tentativa 4: OCR com pytesseract
+    try:
+        images = convert_from_path(pdf_file)
+        for image in images:
+            text += pytesseract.image_to_string(image, lang='por') + "\n"
         if text.strip():
             return text
     except:
