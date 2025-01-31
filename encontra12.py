@@ -20,55 +20,50 @@ def extrair_texto_pdf(pdf_file):
     """Extrai o texto do PDF utilizando múltiplas estratégias, incluindo OCR para PDFs baseados em imagem."""
     text = ""
     try:
-        # Tentativa 1: pdfplumber para lidar com tabelas
         with pdfplumber.open(pdf_file) as pdf:
             for page in pdf.pages:
-                text += page.extract_text() + "\n" if page.extract_text() else ""
+                if page.extract_text():
+                    text += page.extract_text() + "\n"
         if text.strip():
             return text
-    except Exception as e:
-        st.error(f"Erro ao processar pdfplumber: {e}")
+    except:
+        pass
     
     try:
-        # Tentativa 2: PyPDF2
         pdf_reader = PdfReader(pdf_file)
         for page in pdf_reader.pages:
             if page.extract_text():
                 text += page.extract_text() + "\n"
         if text.strip():
             return text
-    except Exception as e:
-        st.error(f"Erro ao processar PyPDF2: {e}")
+    except:
+        pass
     
     try:
-        # Tentativa 3: pdfminer
         text = extract_text(pdf_file)
         if text.strip():
             return text
-    except Exception as e:
-        st.error(f"Erro ao processar pdfminer: {e}")
+    except:
+        pass
     
-    # Tentativa 4: OCR com pytesseract
     try:
         images = convert_from_path(pdf_file)
         for image in images:
             text += pytesseract.image_to_string(image, lang='por') + "\n"
         if text.strip():
             return text
-    except Exception as e:
-        st.error(f"Erro ao processar OCR: {e}")
+    except:
+        pass
     
     return ""  # Retorna string vazia se nenhuma abordagem funcionar
 
 def extrair_nomes_pdf(pdf_file):
     """Extrai nomes completos do PDF, normalizando-os."""
     text = extrair_texto_pdf(pdf_file)
-    st.text_area("Texto extraído", text, height=200)
     
     if not text:
-        return []  # Retorna lista vazia caso não consiga extrair texto
+        return []
     
-    # Expressão regular aprimorada para lidar com diferentes formatações
     matches = re.findall(r'\b[A-ZÀ-Ú][a-zà-ú]+(?: [A-ZÀ-Ú][a-zà-ú]+)+\b', text)
     return sorted({normalizar_texto(name) for name in matches})
 
@@ -82,31 +77,34 @@ def main():
     if nomes_texto and pdf_files:
         nomes_lista = [normalizar_texto(nome) for nome in nomes_texto.split("\n") if nome.strip()]
         csv_names = set(nomes_lista)
-
+        
         results = []
         failed_pdfs = []
         total_pdfs = len(pdf_files)
         progress_bar = st.progress(0)
-
+        
+        found_names = {}
+        
         for i, pdf_file in enumerate(pdf_files, start=1):
             approved_names = extrair_nomes_pdf(pdf_file)
             if not approved_names:
                 failed_pdfs.append(pdf_file.name)
                 continue
-
-            common_names = sorted(csv_names.intersection(approved_names))
-            for idx, name in enumerate(common_names, start=1):
-                results.append({"Ordem": idx, "Nome": name, "Arquivo PDF": pdf_file.name})
-
+            
+            for name in csv_names.intersection(approved_names):
+                if name not in found_names:
+                    found_names[name] = []
+                found_names[name].append(pdf_file.name)
+            
             progress_bar.progress(i / total_pdfs)
-
-        if results:
+        
+        if found_names:
             st.success("Alunos aprovados encontrados!")
-            results_df = pd.DataFrame(results)
+            results_df = pd.DataFrame([{"Nome": name, "Arquivos PDF": ", ".join(files)} for name, files in found_names.items()])
             st.dataframe(results_df)
         else:
             st.warning("Nenhum aluno aprovado foi encontrado nos PDFs enviados.")
-
+        
         if failed_pdfs:
             st.error(f"Falha ao extrair texto dos seguintes PDFs: {', '.join(failed_pdfs)}")
 
