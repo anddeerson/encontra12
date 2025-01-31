@@ -26,8 +26,8 @@ def extrair_texto_pdf(pdf_file):
                 text += page.extract_text() + "\n" if page.extract_text() else ""
         if text.strip():
             return text
-    except:
-        pass
+    except Exception as e:
+        st.error(f"Erro ao processar pdfplumber: {e}")
     
     try:
         # Tentativa 2: PyPDF2
@@ -37,16 +37,16 @@ def extrair_texto_pdf(pdf_file):
                 text += page.extract_text() + "\n"
         if text.strip():
             return text
-    except:
-        pass
+    except Exception as e:
+        st.error(f"Erro ao processar PyPDF2: {e}")
     
     try:
         # Tentativa 3: pdfminer
         text = extract_text(pdf_file)
         if text.strip():
             return text
-    except:
-        pass
+    except Exception as e:
+        st.error(f"Erro ao processar pdfminer: {e}")
     
     # Tentativa 4: OCR com pytesseract
     try:
@@ -55,41 +55,25 @@ def extrair_texto_pdf(pdf_file):
             text += pytesseract.image_to_string(image, lang='por') + "\n"
         if text.strip():
             return text
-    except:
-        pass
+    except Exception as e:
+        st.error(f"Erro ao processar OCR: {e}")
     
     return ""  # Retorna string vazia se nenhuma abordagem funcionar
 
 def extrair_nomes_pdf(pdf_file):
     """Extrai nomes completos do PDF, normalizando-os."""
     text = extrair_texto_pdf(pdf_file)
+    st.text_area("Texto extraído", text, height=200)
+    
     if not text:
         return []  # Retorna lista vazia caso não consiga extrair texto
     
     # Expressão regular aprimorada para lidar com diferentes formatações
-    matches = re.findall(r'(?<=\d{6}\s)[A-ZÀ-Ú][a-zà-ú]+(?: [A-ZÀ-Ú][a-zà-ú]+)+', text)
-    if not matches:
-        matches = re.findall(r'\b[A-ZÀ-Ú][a-zà-ú]+(?: [A-ZÀ-Ú][a-zà-ú]+)+\b', text)
-    
+    matches = re.findall(r'\b[A-ZÀ-Ú][a-zà-ú]+(?: [A-ZÀ-Ú][a-zà-ú]+)+\b', text)
     return sorted({normalizar_texto(name) for name in matches})
 
-def gerar_pdf(resultados):
-    pdf = FPDF()
-    pdf.set_auto_page_break(auto=True, margin=15)
-    pdf.add_page()
-    pdf.set_font("Arial", size=12)
-    pdf.cell(200, 10, "Relatorio de Alunos Aprovados", ln=True, align='C')
-    pdf.ln(10)
-
-    for idx, resultado in enumerate(resultados, start=1):
-        pdf.cell(0, 10, f"{idx}. {resultado['Nome']} - {resultado['Arquivo PDF']}", ln=True)
-
-    pdf_file = "alunos_aprovados.pdf"
-    pdf.output(pdf_file)
-    return pdf_file
-
 def main():
-    st.title("Encontra aluno(s) aprovado(s) - Versão 1.2 (Com scam por OCR")
+    st.title("Encontra aluno(s) aprovado(s) - Versão Melhorada")
     st.write("Cole a lista de nomes dos alunos no campo abaixo e carregue um ou mais PDFs com as listas de aprovados.")
 
     nomes_texto = st.text_area("Cole aqui os nomes dos alunos, um por linha:")
@@ -120,14 +104,6 @@ def main():
             st.success("Alunos aprovados encontrados!")
             results_df = pd.DataFrame(results)
             st.dataframe(results_df)
-
-            csv_download = results_df.to_csv(index=False).encode("utf-8")
-            st.download_button("Baixar resultados como CSV", data=csv_download, file_name="alunos_aprovados.csv")
-
-            pdf_download = gerar_pdf(results)
-            with open(pdf_download, "rb") as pdf_file:
-                st.download_button("Baixar resultados como PDF", data=pdf_file, file_name="alunos_aprovados.pdf",
-                                   mime="application/pdf")
         else:
             st.warning("Nenhum aluno aprovado foi encontrado nos PDFs enviados.")
 
